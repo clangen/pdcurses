@@ -15,7 +15,7 @@ void PDC_beep(void)
 }
 
 #if UINT_MAX >= 0xfffffffful
-# define irq0_ticks()	(getdosmemdword(0x46c))
+# define irq0_ticks()  (getdosmemdword(0x46c))
 /* For 16-bit platforms, we expect that the program will need _two_ memory
    read instructions to read the tick count.  Between the two instructions,
    if we do not turn off interrupts, an IRQ 0 might intervene and update the
@@ -40,7 +40,7 @@ static unsigned long irq0_ticks(void)
     return t;
 }
 #else
-# define irq0_ticks()	(getdosmemdword(0x46c))  /* FIXME */
+# define irq0_ticks()  (getdosmemdword(0x46c))  /* FIXME */
 #endif
 
 static void do_idle(void)
@@ -52,86 +52,63 @@ static void do_idle(void)
     PDCINT(0x28, regs);
 }
 
-#define MAX_TICK	0x1800b0ul	/* no. of IRQ 0 clock ticks per day;
-					   BIOS counter (0:0x46c) will go up
-					   to MAX_TICK - 1 before wrapping to
-					   0 at midnight */
-#define MS_PER_DAY	86400000ul	/* no. of milliseconds in a day */
+#define MAX_TICK       0x1800b0L       /* no. of IRQ 0 clock ticks per day;
+                                          BIOS counter (0:0x46c) will go up
+                                          to MAX_TICK - 1 before wrapping to
+                                          0 at midnight */
+#define MS_PER_DAY     86400000L       /* no. of milliseconds in a day */
 
-void PDC_napms(int ms)
+/* 1080 seconds = 18 minutes = 1/80 day is exactly 19663 ticks.
+If asked to nap for longer than 1080000 milliseconds,  we take
+one or more 18-minute naps.  This avoids wraparound issues and
+the integer overflows that would result for ms > MAX_INT / 859
+(about 42 minutes).  */
+
+#define MAX_NAP_SPAN      (MS_PER_DAY / 80ul)
+
+void PDC_napmsl( long ms)
 {
-    unsigned long goal, start, current;
+    long ticks_to_wait, tick0;
 
     PDC_LOG(("PDC_napms() - called: ms=%d\n", ms));
 
-#if INT_MAX > MS_PER_DAY / 2
-    /* If `int' is 32-bit, we might be asked to "nap" for more than one day,
-       in which case the system timer might wrap around at least twice, and
-       that will be tricky to handle as is.  Slice the "nap" into half-day
-       portions.  */
-    while (ms > MS_PER_DAY / 2)
+    while (ms > MAX_NAP_SPAN)
     {
-        PDC_napms (MS_PER_DAY / 2);
-        ms -= MS_PER_DAY / 2;
+        PDC_napmsl( MAX_NAP_SPAN);
+        ms -= MAX_NAP_SPAN;
     }
-#endif
 
     if (ms < 0)
         return;
 
-    /* Scale the millisecond count by MAX_TICK / MS_PER_DAY.  The scaling
-       done here is not very precise, but what is more important is
-       preventing integer overflow.
+    /* Scale the millisecond count by MAX_TICK / MS_PER_DAY.  We actually
+       scale by 859/47181,  which is correct to within four parts per
+       billion and avoids the need for floating-point math.   We have to
+       round to the nearest integer tick anyway and don't know where we
+       started within a tick,  so this error can be accepted.
 
-       The approximation 67 / 3680 can be obtained by considering the
-       convergents (mathworld.wolfram.com/Convergent.html) of MAX_TICK /
-       MS_PER_DAY 's continued fraction representation.  In theory,  this
-       should be used in every case;  but in the (I think) impossible
-       case where x * 67 could overflow,  we could use the fact that
-       MAX_TICK / MS_PER_DAY = 1/64 + 1/432 + 1/3750, exactly.  */
+       Here,  we assume that we start (on average) halfway through a tick,
+       but will end almost exactly when the 'goal' tick begins.  So the
+       rounding (on average) will work out correctly.       */
 
-#if MS_PER_DAY / 2 <= ULONG_MAX / 67ul
-# define MS_TO_TICKS(x)	((x) * 67ul / 3680ul)
-#else
-# define MS_TO_TICKS(x) ((x) / 64 + (x) / 432 + (x) / 3750)
-#endif
-    goal = MS_TO_TICKS(ms);
+    ticks_to_wait = (ms * 859L) / 47181L + 1L;
+    tick0 = irq0_ticks();
 
-    if (!goal)
-        goal++;
-
-    start = irq0_ticks();
-    goal += start;
-
-    if (goal >= MAX_TICK)
+    for( ;;)
     {
-        /* We expect to cross over midnight!  Wait for the clock tick count
-           to wrap around, then wait out the remaining ticks.  */
-        goal -= MAX_TICK;
+        long t = irq0_ticks() - tick0;
 
-        while (irq0_ticks() == start)
-            do_idle();
-
-        while (irq0_ticks() > start)
-            do_idle();
-
-        start = 0;
-    }
-
-    while (goal > (current = irq0_ticks()))
-    {
-        if (current < start)
-        {
-            /* If the BIOS time somehow gets reset under us (ugh!), then
-               restart (what is left of) the nap with `current' as the new
-               starting time.  Remember to adjust the goal time
-               accordingly!  */
-            goal -= start - current;
-            start = current;
-        }
-
+        if( t < 0)           /* midnight rollover */
+            t += MAX_TICK;
+        if( t >= ticks_to_wait)
+            break;
         do_idle();
     }
+}
+
+void PDC_napms(int ms)
+{
+   PDC_napmsl( (long)ms);
 }
 
 const char *PDC_sysname(void)
