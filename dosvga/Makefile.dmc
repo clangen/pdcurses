@@ -14,17 +14,16 @@ PDCURSES_HEADERS   = $(PDCURSES_CURSES_H) $(PDCURSES_CURSPRIV_H)
 PANEL_HEADER   = $(PDCURSES_SRCDIR)\panel.h
 
 srcdir      = $(PDCURSES_SRCDIR)\pdcurses
-osdir      = $(PDCURSES_SRCDIR)\vt
+osdir      = $(PDCURSES_SRCDIR)\dosvga
 demodir      = $(PDCURSES_SRCDIR)\demos
 
-PDCURSES_VT_H   = $(osdir)\pdcvt.h
+PDCURSES_DOS_H   = $(osdir)\pdcdos.h
 
 CC      = dmc
 
 CHTYPE = -DCHTYPE_32
 
-CFLAGS      = -c -o+space -Nc -mx -DDOS
-# CFLAGS      = -c -o+space -Nc -mld -DDOS
+CFLAGS      = -c -o+space -Nc -msd
 
 CPPFLAGS   = -I$(PDCURSES_SRCDIR) -msd $(CHTYPE)
 
@@ -38,7 +37,7 @@ BUILD      = $(CC) $(CFLAGS) $(CPPFLAGS)
 DEMOS      = testcurs.exe ozdemo.exe newtest.exe xmas.exe  \
 tuidemo.exe firework.exe ptest.exe rain.exe worm.exe
 
-all:    $(LIBCURSES)
+all:    $(LIBCURSES) $(DEMOS)
 
 clean:
    -del *.obj
@@ -46,8 +45,6 @@ clean:
    -del *.exe
    -del *.map
    -del advapi32.def
-
-demos:  $(LIBCURSES) $(DEMOS)
 
 LIBOBJS = addch.obj addchstr.obj addstr.obj attr.obj beep.obj bkgd.obj \
 border.obj clear.obj color.obj delch.obj deleteln.obj getch.obj \
@@ -64,7 +61,7 @@ DEMOOBJS = testcurs.obj ozdemo.obj newtest.obj xmas.obj tuidemo.obj  \
 tui.obj firework.obj ptest.obj rain.obj worm.obj
 
 $(LIBOBJS) $(PDCOBJS) : $(PDCURSES_HEADERS)
-$(PDCOBJS) : $(PDCURSES_VT_H)
+$(PDCOBJS) : $(PDCURSES_DOS_H)
 panel.obj ptest.obj: $(PANEL_HEADER)
 
 $(DEMOOBJS) : $(PDCURSES_CURSES_H)
@@ -250,3 +247,6 @@ tui.obj: $(demodir)\tui.c $(demodir)\tui.h
 
 tuidemo.obj: $(demodir)\tuidemo.c
    $(BUILD) -I$(demodir) $(demodir)\$*.c
+
+naptest.exe:    naptest.c
+   $(DEMOBUILD)

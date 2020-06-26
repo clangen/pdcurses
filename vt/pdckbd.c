@@ -118,6 +118,9 @@ static int xlate_vt_codes_for_dos( const int key1, const int key2)
 }
 
 #endif
+
+#define MAX_COUNT 15
+
 /* Mouse events include six bytes.  First three are
 
 ESC [ M
@@ -160,6 +163,7 @@ static int xlate_vt_codes( const int *c, const int count)
                KEY_END,  2, 'O', 'F',
                KEY_END,  2, '[', 'F',
                KEY_B2,   2, '[', 'E',
+               KEY_BTAB, 2, '[', 'Z',     /* Shift-Tab */
                KEY_IC,   3, '[', '2', '~',
                KEY_DC,   3, '[', '3', '~',
                KEY_PPAGE, 3, '[', '5', '~',
@@ -209,7 +213,18 @@ static int xlate_vt_codes( const int *c, const int count)
                KEY_F(22), 6, '[', '2', '1', ';', '2', '~',
                KEY_F(23), 6, '[', '2', '3', ';', '2', '~',  /* shift-f11 */
                KEY_F(24), 6, '[', '2', '4', ';', '2', '~',
-               27, 0,
+               ALT_UP, 5, '[', '1', ';', '3', 'A',
+               ALT_RIGHT, 5, '[', '1', ';', '3', 'C',
+               ALT_DOWN, 5, '[', '1', ';', '3', 'B',
+               ALT_LEFT, 5, '[', '1', ';', '3', 'D',
+               CTL_UP, 5, '[', '1', ';', '5', 'A',
+               CTL_RIGHT, 5, '[', '1', ';', '5', 'C',
+               CTL_DOWN, 5, '[', '1', ';', '5', 'B',
+               CTL_LEFT, 5, '[', '1', ';', '5', 'D',
+               KEY_SUP, 5, '[', '1', ';', '2', 'A',
+               KEY_SRIGHT, 5, '[', '1', ';', '2', 'C',
+               KEY_SDOWN, 5, '[', '1', ';', '2', 'B',
+               KEY_SLEFT, 5, '[', '1', ';', '2', 'D',
                0 };
    int i, rval = -1;
    const int *tptr;
@@ -218,11 +233,26 @@ static int xlate_vt_codes( const int *c, const int count)
       {
       if( c[0] >= 'a' && c[0] <= 'z')
          rval = ALT_A + c[0] - 'a';
-      if( c[0] >= '0' && c[0] <= '9')
+      else if( c[0] >= '0' && c[0] <= '9')
          rval = ALT_0 + c[0] - '0';
+      else
+         {
+         const char *text = "',./[];`\x1b\\=-\x0a\x7f";
+         const char *tptr = strchr( text, c[0]);
+         const int codes[] = { ALT_FQUOTE, ALT_COMMA, ALT_STOP, ALT_FSLASH,
+                     ALT_LBRACKET, ALT_RBRACKET,
+                     ALT_SEMICOLON, ALT_BQUOTE, ALT_ESC,
+                     ALT_BSLASH, ALT_EQUAL, ALT_MINUS, ALT_ENTER, ALT_BKSP };
+
+         if( tptr)
+             rval = codes[tptr - text];
+         }
       }
    else if( count == 5 && c[0] == '[' && c[1] == 'M')
       rval = KEY_MOUSE;
+   else if( count > 6 && c[0] == '[' && c[1] == '<'
+                             && (c[count - 1] == 'M' || c[count - 1] == 'm'))
+      rval = KEY_MOUSE;    /* SGR mouse mode */
    for( tptr = tbl; rval == -1 && *tptr; tptr += 2 + tptr[1])
       if( count == tptr[1])
          {
@@ -246,7 +276,7 @@ int PDC_get_key( void)
       }
    if( check_key( &rval))
       {
-      int c[13];
+      int c[MAX_COUNT];
 
 #ifdef USE_CONIO
       SP->key_code = (rval == 0 || rval == 224);
@@ -266,68 +296,108 @@ int PDC_get_key( void)
          {
          int count = 0;
 
-         while( count < 6 && check_key( &c[count])
-                  && (rval = xlate_vt_codes( c, count + 1)) == -1)
+         rval = -1;
+         while( rval == -1 && count < MAX_COUNT && check_key( &c[count]))
+            {
             count++;
+            rval = xlate_vt_codes( c, count);
+            if( rval == ALT_LBRACKET && check_key( NULL))
+               rval = -1;
+            }
+         if( !count)             /* Escape hit */
+            rval = 27;
+         count--;
          if( rval == KEY_MOUSE)
             {
-            int idx = (c[2] & 3), flags = 0, i;
-            const bool release = (idx == 3);
+            int idx, button, flags = 0, i, x, y;
             static int held = 0;
+            bool release;
 
-            if( c[2] & 4)
-               flags |= PDC_BUTTON_SHIFT;
-            if( c[2] & 8)
-               flags |= PDC_BUTTON_ALT;
-            if( c[2] & 16)
-               flags |= PDC_BUTTON_CONTROL;
-            if( (c[2] & 0x60) == 0x40)    /* mouse move */
+            if( c[1] == 'M')     /* 'traditional' mouse encoding */
                {
-               int report_event = 0;
+               x = (unsigned char)( c[3] - ' ' - 1);
+               y = (unsigned char)( c[4] - ' ' - 1);
+               idx = c[2];
+               button = idx & 3;
+               release = (button == 3);
+               if( release)         /* which button was released? */
+                  {
+                  button = 0;
+                  while( button < 3 && !((held >> button) & 1))
+                     button++;
+                  }
+               }
+            else                 /* SGR mouse encoding */
+               {
+               int n_fields, n_bytes, i;
+               char tbuff[MAX_COUNT];
 
-               if( idx == 0 && (SP->_trap_mbe & BUTTON1_MOVED))
-                  report_event |= 1;
-               if( idx == 1 && (SP->_trap_mbe & BUTTON2_MOVED))
-                  report_event |= 2;
-               if( idx == 2 && (SP->_trap_mbe & BUTTON3_MOVED))
-                  report_event |= 4;
-               if( report_event)
-                  report_event |= PDC_MOUSE_MOVED;
-               else if( SP->_trap_mbe & REPORT_MOUSE_POSITION)
-                  report_event = PDC_MOUSE_POSITION;
-               SP->mouse_status.changes = report_event;
-               for( i = 0; i < 3; i++)
-                  SP->mouse_status.button[i] = (i == idx ? BUTTON_MOVED : 0);
-               idx = 3;
+               assert( c[1] == '<');
+               for( i = 0; i < count; i++)
+                  tbuff[i] = (char)c[i];
+               tbuff[count] = '\0';
+               n_fields = sscanf( tbuff + 2, "%d;%d;%d%n", &idx,
+                                                    &x, &y, &n_bytes);
+               assert( n_fields == 3);
+               assert( c[count] == 'M' || c[count] == 'm');
+               release = (c[count] == 'm');
+               button = idx & 3;
+               if( idx & 0x40)            /* (SGR) wheel mouse event; */
+                  idx |= 0x20;            /* requires this bit set in 'traditional' encoding */
+               else if( idx & 0x20)       /* (SGR) mouse move event sets a different bit */
+                  idx ^= 0x60;            /* in the traditional encoding */
+               x--;
+               y--;
                }
-            else if( idx == 3)         /* it's a release */
+            if( idx & 4)
+               flags |= BUTTON_SHIFT;
+            if( idx & 8)
+               flags |= BUTTON_ALT;
+            if( idx & 16)
+               flags |= BUTTON_CONTROL;
+            if( (idx & 0x60) == 0x40)    /* mouse move */
                {
-               idx = 0;
-               while( idx < 3 && !((held >> idx) & 1))
-                  idx++;
-               held ^= (1 << idx);
+               if( x != SP->mouse_status.x || y != SP->mouse_status.y)
+                  {
+                  int report_event = PDC_MOUSE_MOVED;
+
+                  if( button == 0)
+                     report_event |= 1;
+                  if( button == 1)
+                     report_event |= 2;
+                  if( button == 2)
+                     report_event |= 4;
+                  SP->mouse_status.changes = report_event;
+                  for( i = 0; i < 3; i++)
+                     SP->mouse_status.button[i] = (i == button ? BUTTON_MOVED : 0);
+                  for( i = 0; i < 3; i++)
+                     SP->mouse_status.button[i] |= flags;
+                  button = 3;
+                  }
+               else              /* mouse didn't actually move */
+                  return( -1);
                }
-            if( idx < 3)
+            if( button < 3)
                {
                memset(&SP->mouse_status, 0, sizeof(MOUSE_STATUS));
-               SP->mouse_status.button[idx] =
+               SP->mouse_status.button[button] =
                               (release ? BUTTON_RELEASED : BUTTON_PRESSED);
-               if( (c[2] & 0x60) == 0x60)    /* actually mouse wheel event */
+               if( (idx & 0x60) == 0x60)    /* actually mouse wheel event */
                   SP->mouse_status.changes =
-                        (idx ? PDC_MOUSE_WHEEL_DOWN : PDC_MOUSE_WHEEL_UP);
+                        (button ? PDC_MOUSE_WHEEL_DOWN : PDC_MOUSE_WHEEL_UP);
                else     /* "normal" mouse button */
-                  SP->mouse_status.changes = (1 << idx);
-               if( !release && !(c[2] & 64))   /* wait for a possible release */
+                  SP->mouse_status.changes = (1 << button);
+               if( !release && !(idx & 64))   /* wait for a possible release */
                   {
                   int n_events = 0;
 
-                  while( n_events < 5)
+                  while( n_events < 6)
                      {
                      PDC_napms( SP->mouse_wait);
                      if( check_key( c))
                         {
                         count = 0;
-                        while( count < 5 && check_key( &c[count]))
+                        while( count < MAX_COUNT && check_key( &c[count]))
                            count++;
                         n_events++;
                         }
@@ -335,19 +405,19 @@ int PDC_get_key( void)
                         break;
                      }
                   if( !n_events)   /* just a click,  no release(s) */
-                     held ^= (1 << idx);
+                     held ^= (1 << button);
                   else if( n_events == 1)
-                      SP->mouse_status.button[idx] = BUTTON_CLICKED;
+                      SP->mouse_status.button[button] = BUTTON_CLICKED;
                   else if( n_events <= 3)
-                      SP->mouse_status.button[idx] = BUTTON_DOUBLE_CLICKED;
+                      SP->mouse_status.button[button] = BUTTON_DOUBLE_CLICKED;
                   else if( n_events <= 5)
-                      SP->mouse_status.button[idx] = BUTTON_TRIPLE_CLICKED;
+                      SP->mouse_status.button[button] = BUTTON_TRIPLE_CLICKED;
                   }
                }
             for( i = 0; i < 3; i++)
                SP->mouse_status.button[i] |= flags;
-            SP->mouse_status.x = (unsigned char)( c[3] - ' ' - 1);
-            SP->mouse_status.y = (unsigned char)( c[4] - ' ' - 1);
+            SP->mouse_status.x = x;
+            SP->mouse_status.y = y;
             }
          }
       else if( (rval & 0xc0) == 0xc0)      /* start of UTF-8 */
@@ -408,7 +478,7 @@ int PDC_mouse_set( void)
 
    if( !PDC_is_ansi)
       {
-      static int curr_tracking_state = 0;
+      static int curr_tracking_state = -1;
       int tracking_state;
 
       if( SP->_trap_mbe & REPORT_MOUSE_POSITION)
@@ -419,11 +489,12 @@ int PDC_mouse_set( void)
          tracking_state = (SP->_trap_mbe ? 1000 : 0);
       if( curr_tracking_state != tracking_state)
          {
-         if( curr_tracking_state)
+         if( curr_tracking_state > 0)
             printf( "\033[?%dl", curr_tracking_state);
          if( tracking_state)
             printf( "\033[?%dh", tracking_state);
          curr_tracking_state = tracking_state;
+         PDC_doupdate( );
          }
       }
    return(  OK);

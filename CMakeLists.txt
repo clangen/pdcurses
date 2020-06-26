@@ -8,6 +8,7 @@ endif()
 set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH}" "${CMAKE_SOURCE_DIR}/cmake")
 
 include (get_version)
+project(pdcurses VERSION "${CURSES_VERSION}" LANGUAGES C)
 
 if(MSVC)
     set(CMAKE_DEBUG_POSTFIX d)
@@ -20,7 +21,6 @@ message(STATUS "Build Type ............. ${CMAKE_BUILD_TYPE}")
 include(build_options)
 include(build_dependencies)
 
-project(pdcurses VERSION "${CURSES_VERSION}" LANGUAGES C)
 message(STATUS "PDC Version ............ ${PROJECT_VERSION}")
 
 include(gen_config_header)
@@ -36,6 +36,14 @@ if(PDC_DOS_BUILD) # currently requires a unique toolchain file
 
     add_subdirectory(dos)
 
+elseif(PDC_DOSVGA_BUILD) # currently requires a unique toolchain file
+
+    add_subdirectory(dosvga)
+
+elseif(PDC_DOSVT_BUILD) # currently requires a unique toolchain file
+
+    add_subdirectory(vt)
+
 elseif(PDC_OS2_BUILD) # currently requires a unique toolchain file
 
     add_subdirectory(os2)
@@ -50,7 +58,7 @@ else()
         
     endif()
 
-    if(UNIX)
+    if(UNIX OR WATCOM)
         add_subdirectory(vt)
     endif()
 

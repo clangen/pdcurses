@@ -6,14 +6,17 @@
 # [all|demos|libpdcurses.a|testcurs]...
 
 O = o
+# looks wrong, but was in here before
+E = .exe
 
 ifndef PDCURSES_SRCDIR
 	PDCURSES_SRCDIR	= ..
 endif
 
-include $(PDCURSES_SRCDIR)/libobjs.mif
-
 osdir		= $(PDCURSES_SRCDIR)/vt
+common		= $(PDCURSES_SRCDIR)/common
+
+include $(common)/libobjs.mif
 
 # If your system doesn't have these, remove the defines here
 SFLAGS		= -DHAVE_VSNPRINTF -DHAVE_VSSCANF
@@ -43,10 +46,6 @@ ifdef CHTYPE_32
 	CFLAGS += -DCHTYPE_32
 endif
 
-ifdef CHTYPE_16
-	CFLAGS += -DCHTYPE_16
-endif
-
 ifdef _w64
 	PREFIX  = x86_64-w64-mingw32-
 	EXE = .exe
@@ -73,14 +72,14 @@ DEMOS		= firework$(EXE) ozdemo$(EXE)  newtest$(EXE) ptest$(EXE) rain$(EXE) \
 
 .PHONY: all libs clean demos
 
-all:	libs demos
+all:	libs
 
 libs:	$(LIBCURSES)
 
 clean:
 	-rm -rf *.o trace $(LIBCURSES) $(DEMOS)
 
-demos:	$(DEMOS)
+demos:	libs $(DEMOS)
 ifneq ($(DEBUG),Y)
 	strip $(DEMOS)
 endif
