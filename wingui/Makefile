@@ -6,13 +6,16 @@
 # [all|demos|pdcurses.a|testcurs.exe...]
 
 O = o
+E = .exe
 
 ifndef PDCURSES_SRCDIR
 	PDCURSES_SRCDIR = ..
 endif
 
-include $(PDCURSES_SRCDIR)/version.mif
-include $(PDCURSES_SRCDIR)/libobjs.mif
+common     = $(PDCURSES_SRCDIR)/common
+
+include $(common)/version.mif
+include $(common)/libobjs.mif
 
 uname_S := $(shell uname -s 2>/dev/null)
 
@@ -64,8 +67,8 @@ PDCURSES_WIN_H	= $(osdir)/pdcwin.h
 
 CC	= $(PREFIX)gcc
 
-AR	= $(PREFIX)ar
-STRIP	= $(PREFIX)strip
+AR	= ar
+STRIP	= strip
 
 ifeq ($(DEBUG),Y)
 	CFLAGS  = -g -Wall -DPDCDEBUG
@@ -116,7 +119,7 @@ endif
 
 .PHONY: all libs clean demos dist
 
-all:	libs demos
+all:	libs
 
 libs:	$(LIBCURSES)
 
@@ -146,7 +149,8 @@ $(LIBOBJS) : %.o: $(srcdir)/%.c
 $(PDCOBJS) : %.o: $(osdir)/%.c
 	$(CC) -c $(CFLAGS) $<
 
-firework.exe ozdemo.exe newtest.exe ptest.exe rain.exe testcurs.exe  \
+firework.exe newtest.exe ozdemo.exe picsview.exe \
+ptest.exe rain.exe speed.exe testcurs.exe test_pan.exe \
 version.exe worm.exe xmas.exe: %.exe: $(demodir)/%.c
 	$(CC) $(CFLAGS) -mwindows -o$@ $< $(LIBCURSES) $(EXELIBS)
 
@@ -163,4 +167,4 @@ PLATFORM1 = MinGW Win32
 PLATFORM2 = MinGW for Win32
 ARCNAME = pdc$(VER)_ming_w32
 
-include $(PDCURSES_SRCDIR)/makedist.mif
+include $(common)/makedist.mif

@@ -1,12 +1,18 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+
+#define PDC_NCMOUSE
+
 #include "curses.h"
 #include <math.h>
 #include <assert.h>
 #if defined( __linux)
     #define CONVERT_IMAGES
     #include <unistd.h>
+#endif
+#if defined(Plan9)
+   #include <unistd.h>
 #endif
 
 /* This is inspired by,  but not really based on,  Thomas E. Dickey's
@@ -55,7 +61,7 @@ image consumes exactly width * height * 3 bytes. */
    #define ACS_BBLOCK 0x2584
 #endif
 
-static int get_rgb_value( char *iptr)
+static int get_rgb_value( const char *iptr)
 {
    unsigned char red = (unsigned char)iptr[0];
    unsigned char grn = (unsigned char)iptr[1];
@@ -158,6 +164,44 @@ static void make_fake_image( const char *filename)
    fclose( ofile);
 }
 
+/* Compute dither offset.  See https://en.wikipedia.org/wiki/Ordered_dithering
+for explanation.  This would correspond to a 16x16 'threshold map'.  */
+
+static int calc_dither( int x, int y)
+{
+   int rval = 1;
+
+   while( !(rval & 0x100))
+      {
+      rval <<= 2;
+      rval |= (x & 1) | ((y & 1) << 1);
+      x >>= 1;
+      y >>= 1;
+      }
+   return( rval & 0xff);
+}
+
+/* For 'full-color' palettes,  the mapping from RGB to default palette
+entry is a simple shift by 256.  For 'traditional' 256-color systems
+with a 6x6x6 color cube,  the math is slightly harder.  Dithering is
+used to make the results marginally less ugly. */
+
+static int find_in_palette( const int rgb, const int dither)
+{
+   if( COLORS > 0x100000)
+      return( rgb + 256);
+   else
+      {        /* find entry in 6x6x6 color cube */
+      const int red = (rgb & 0xff);
+      const int grn = ((rgb >> 8) & 0xff);
+      const int blu = ((rgb >> 16) & 0xff);
+
+      return( 16 + ((blu * 5 + dither) / 256)
+                 + ((grn * 5 + dither) / 256) * 6
+                 + ((red * 5 + dither) / 256) * 36);
+      }
+}
+
 #if defined( __linux)
     const char *temp_image_name = "/tmp/ickywax.pnm";
 #else
@@ -236,14 +280,12 @@ int main( const int argc, const char *argv[])
    cbreak( );
    noecho();
    keypad( stdscr, 1);
-#ifdef PDCURSES
-   mouse_set( ALL_MOUSE_EVENTS | REPORT_MOUSE_POSITION);
-#endif
+   mousemask( ALL_MOUSE_EVENTS | REPORT_MOUSE_POSITION, NULL);
    while( c != 27 && c != 'q')
       {
       int *xloc = (int *)calloc( 2 * COLS, sizeof( int));
-      int *rgbs = xloc + COLS;
-      int prev_rgb = -1, prev_low_rgb = -1;
+      int *idxs = xloc + COLS;
+      int prev_idx = -1, prev_low_idx = -1;
       int j, pair_num = 16;
       MEVENT mouse_event;
       double xpix1, ypix1;
@@ -260,12 +302,13 @@ int main( const int argc, const char *argv[])
          ypix = (double)ysize / 2.;
          }
       for( i = 0; i < COLS; i++)
-         xloc[i] = (int)floor( xpix + ((double)(i - COLS / 2) * scale));
+         xloc[i] = (int)( xpix + (double)i * scale) - (int)( COLS * scale) / 2;
       erase( );
       for( j = 0; j < LINES * 2; j++)
          {
-         int yloc = (int)floor( ypix + ((double)(j - LINES) * scale * aspect));
-         char *pptr = pixels + yloc * 3 * xsize;
+         const int yloc = (int)( ypix + (double)j * scale * aspect)
+                        - (int)( LINES * scale * aspect);
+         const char *pptr = pixels + yloc * 3 * xsize;
 
          if( yloc < 0 || yloc >= ysize)
             pptr = NULL;
@@ -273,10 +316,11 @@ int main( const int argc, const char *argv[])
             ;
          if( !(j % 2))
             {
-            memset( rgbs, 0, COLS * sizeof( int));
+            memset( idxs, 0, COLS * sizeof( int));
             if( pptr)
                for( ; i < COLS && xloc[i] < xsize; i++)
-                  rgbs[i] = get_rgb_value( pptr + xloc[i] * 3);
+                  idxs[i] = find_in_palette( get_rgb_value( pptr + xloc[i] * 3),
+                                    calc_dither( i, j));
             }
          else
             {
@@ -284,14 +328,19 @@ int main( const int argc, const char *argv[])
             for( ; i < COLS && xloc[i] < xsize; i++)
                {
                int low_rgb = (pptr ? get_rgb_value( pptr + xloc[i] * 3) : 0);
+               int low_idx = find_in_palette( low_rgb, calc_dither( i, j));
 
-               if( low_rgb != prev_low_rgb || rgbs[i] != prev_rgb)
+               if( low_idx != prev_low_idx || idxs[i] != prev_idx)
                   {
-                  init_extended_pair( pair_num, low_rgb + 256, rgbs[i] + 256);
+#ifdef __PDCURSES__
+                  init_extended_pair( pair_num, low_idx, idxs[i]);
+#else
+                  init_pair( pair_num, low_idx, idxs[i]);
+#endif
                   attrset( COLOR_PAIR( pair_num));
                   pair_num++;
-                  prev_low_rgb = low_rgb;
-                  prev_rgb = rgbs[i];
+                  prev_low_idx = low_idx;
+                  prev_idx = idxs[i];
                   }
                addch( ACS_BBLOCK);
                }
@@ -322,36 +371,31 @@ int main( const int argc, const char *argv[])
          c = getch( );
          if( c == KEY_MOUSE)
             {
-#ifdef PDCURSES
-            nc_getmouse( &mouse_event);
-#else
             getmouse( &mouse_event);
-#endif
             xpix1 = xpix + (double)(mouse_event.x - COLS / 2) * scale;
             ypix1 = ypix + (double)(mouse_event.y - LINES / 2) * scale * 2. * aspect;
-#ifdef PDCURSES
-            if( MOUSE_POS_REPORT)
+            if( mouse_event.bstate & REPORT_MOUSE_POSITION)
                {
                c = -1;
                snprintf( buff, sizeof( buff), "x=%5d y=%5d", (int)xpix1, (int)ypix1);
                mvaddstr( LINES - 2, 0, buff);
                }
-#endif
             }
          }
          while( c == -1);
       switch( c)
          {
-#ifdef PDCURSES
          case KEY_MOUSE:
             {
             double rescale = 1.;
 
-            if( MOUSE_WHEEL_UP)
+            if( mouse_event.bstate & BUTTON4_PRESSED)
                rescale = 1. / 1.2;
-            else if( MOUSE_WHEEL_DOWN)
+#ifdef __PDCURSES__
+            else if( mouse_event.bstate & BUTTON5_PRESSED)
                rescale = 1.2;
-            else if( !MOUSE_MOVED)
+#endif
+            else
                {
                xpix = xpix1;
                ypix = ypix1;
@@ -361,7 +405,6 @@ int main( const int argc, const char *argv[])
             ypix += (ypix1 - ypix) * (1. - rescale);
             }
             break;
-#endif
          case '*':
             scale /= 1.2;
             break;

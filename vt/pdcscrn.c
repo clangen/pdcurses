@@ -102,11 +102,28 @@ int PDC_rows = -1, PDC_cols = -1;
 bool PDC_resize_occurred = FALSE;
 const int STDIN = 0;
 chtype PDC_capabilities = 0;
+static mmask_t _stored_trap_mbe;
 
 /* COLOR_PAIR to attribute encoding table. */
 
 void PDC_reset_prog_mode( void)
 {
+#ifdef USE_TERMIOS
+    struct termios term;
+
+    tcgetattr( STDIN, &orig_term);
+    memcpy( &term, &orig_term, sizeof( term));
+    term.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr( STDIN, TCSANOW, &term);
+#endif
+    if( !PDC_is_ansi)
+        printf( "\033[?1006h");    /* Set SGR mouse tracking,  if available */
+    printf( "\033[?47h");      /* Save screen */
+    printf( "\0337");         /* save cursor & attribs (VT100) */
+
+    SP->_trap_mbe = _stored_trap_mbe;
+    PDC_mouse_set( );          /* clear any mouse event captures */
+    PDC_resize_occurred = FALSE;
 }
 
 void PDC_reset_shell_mode( void)
@@ -148,6 +165,7 @@ void PDC_scr_close( void)
    printf( "\033[?47l");      /* restore screen */
    PDC_curs_set( 2);          /* blinking block cursor */
    PDC_gotoyx( PDC_cols - 1, 0);
+   _stored_trap_mbe = SP->_trap_mbe;
    SP->_trap_mbe = 0;
    PDC_mouse_set( );          /* clear any mouse event captures */
 #ifdef _WIN32
@@ -205,14 +223,13 @@ int PDC_scr_open(void)
     const char *colorterm = getenv( "COLORTERM");
 #ifdef USE_TERMIOS
     struct sigaction sa;
-    struct termios term;
 #endif
 #ifdef _WIN32
     set_win10_for_vt_codes( TRUE);
 #endif
 
     PDC_LOG(("PDC_scr_open called\n"));
-    if( !strcmp( term_env, "linux"))
+    if( term_env && !strcmp( term_env, "linux"))
        PDC_is_ansi = TRUE;
     else if( colorterm && !strcmp( colorterm, "truecolor"))
        PDC_has_rgb_color = TRUE;
@@ -296,19 +313,8 @@ int PDC_scr_open(void)
         return ERR;
     }
 
-#ifdef USE_TERMIOS
-    tcgetattr( STDIN, &orig_term);
-    memcpy( &term, &orig_term, sizeof( term));
-    term.c_lflag &= ~(ICANON | ECHO);
-    tcsetattr( STDIN, TCSANOW, &term);
-#endif
-    if( !PDC_is_ansi)
-        printf( "\033[?1006h");    /* Set SGR mouse tracking,  if available */
-    printf( "\033[?47h");      /* Save screen */
-    printf( "\0337");         /* save cursor & attribs (VT100) */
-    PDC_resize_occurred = FALSE;
+    PDC_reset_prog_mode();
     PDC_LOG(("PDC_scr_open exit\n"));
-/*  PDC_reset_prog_mode();   doesn't do anything anyway */
     return( 0);
 }
 
@@ -325,71 +331,6 @@ void PDC_set_resize_limits( const int new_min_lines,
    return;
 }
 
-/* PDC_init_color(), PDC_init_pair(),  and PDC_set_blink() all share a common
-issue : after adjusting the display characteristic in question,  all relevant
-text should be redrawn.  Call PDC_init_pair( 3, ...),  and all text using
-color pair 3 should be redrawn;  call PDC_init_color( 5, ...) and all text
-using color index 5 for either foreground or background should be redrawn;
-turn "real blinking" on/off,  and all blinking text should be redrawn.
-(On platforms where blinking text is controlled by a timer and redrawn every
-half second or so,  such as X11,  SDLx,  and Win32a,  this function can be
-used for that purpose as well.)
-
-   PDC_show_changes( ) will look for relevant chains of text and redraw them.
-For speed/simplicity,  the code looks for the first and last character in
-each line that would be affected, then draws those in between.  Often --
-perhaps usually -- this will be zero characters, i.e., no text on that
-particular line happens to have an attribute requiring redrawing. */
-
-static int get_pair( const chtype ch)
-
-{
-   return( (int)( (ch & A_COLOR) >> PDC_COLOR_SHIFT) & (COLOR_PAIRS - 1));
-}
-
-static int color_used_for_this_char( const chtype c, const int idx)
-{
-    const int color = get_pair( c);
-    int fg, bg;
-    int rval;
-
-    extended_pair_content( color, &fg, &bg);
-    rval = (fg == idx || bg == idx);
-    return( rval);
-}
-
-void PDC_show_changes( const int pair, const int idx, const chtype attr)
-{
-    if( curscr && curscr->_y)
-    {
-        int i;
-
-        for( i = 0; i < SP->lines - 1; i++)
-            if( curscr->_y[i])
-            {
-                int j = 0, n_chars;
-                chtype *line = curscr->_y[i];
-
-         /* skip over starting text that isn't changed : */
-                while( j < SP->cols && get_pair( *line) != pair
-                       && !color_used_for_this_char( *line, idx)
-                       && !(attr & *line))
-                {
-                    j++;
-                    line++;
-                }
-                n_chars = SP->cols - j;
-        /* then skip over text at the end that's not the right color: */
-                while( n_chars && get_pair( line[n_chars - 1]) != pair
-                       && !color_used_for_this_char( line[n_chars - 1], idx)
-                       && !(attr & line[n_chars - 1]))
-                    n_chars--;
-                assert( n_chars >= 0);
-                if( n_chars)
-                    PDC_transform_line( i, j, n_chars, line);
-            }
-    }
-}
 
 bool PDC_can_change_color(void)
 {
@@ -414,6 +355,6 @@ int PDC_init_color( int color, int red, int green, int blue)
                                  DIVROUND(blue * 255, 1000));
 
     if( !PDC_set_palette_entry( color, new_rgb))
-        PDC_show_changes( -1, color, 0);
+        curscr->_clear = TRUE;
     return OK;
 }
