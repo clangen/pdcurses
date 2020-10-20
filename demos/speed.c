@@ -35,20 +35,20 @@ millisecond precision on older compilers/systems.  We'll
 use gettimeofday() when available.        */
 
 #if defined(__TURBOC__) || defined(__EMX__) || defined(__DJGPP__) || \
-    defined( __DMC__) || defined(__WATCOMC__)
+    defined( __DMC__) || defined(__WATCOMC__) || defined(_MSC_VER)
 #include <sys/timeb.h>
 
-static int millisec_clock( )
+static long millisec_clock( )
 {
     struct timeb t;
 
     ftime( &t);
-    return( t.time * 1000 + t.millitm);
+    return( (long)t.time * 1000L + (long)t.millitm);
 }
 #else
 #include <sys/time.h>
 
-static int millisec_clock( )
+static long millisec_clock( )
 {
     struct timeval t;
 
@@ -60,7 +60,7 @@ static int millisec_clock( )
 int main( const int argc, const char **argv)
 {
     unsigned n_frames = 0;
-    int t0;
+    long t0;
 
     resize_term( 30, 90);
     initscr();
@@ -70,7 +70,7 @@ int main( const int argc, const char **argv)
     keypad( stdscr, 1);
     nodelay(stdscr, TRUE);
     t0 = millisec_clock( );
-    while( millisec_clock( ) - t0 < 3000 && getch( ) != 'q')
+    while( millisec_clock( ) - t0 < 3000L && getch( ) != 'q')
       {
       char buff[11];
       int i, j;

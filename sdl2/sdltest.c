@@ -10,25 +10,27 @@
 #include <stdlib.h>
 #include <time.h>
 
-/* You could #include pdcsdl.h, or just add the relevant declarations
-   here: */
-
-PDCEX SDL_Window *pdc_window;
-PDCEX SDL_Surface *pdc_screen;
-PDCEX int pdc_yoffset;
+#include "pdcsdl.h"
 
 int main(int argc, char **argv)
 {
     char inp[60];
-    int i, j, seed;
+    int i, j;
+    const unsigned seed = (unsigned)time((time_t *)0);
 
-    seed = time((time_t *)0);
     srand(seed);
 
     /* Initialize SDL */
 
     if (SDL_Init(SDL_INIT_VIDEO) < 0)
         exit(1);
+
+#ifdef PDC_WIDE
+    if( argc > 1)
+    {
+         pdc_sdl_render_mode = atoi( argv[1]);
+    }
+#endif
 
     atexit(SDL_Quit);
 

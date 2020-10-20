@@ -151,15 +151,24 @@ int start_color(void)
     return OK;
 }
 
+static int _default_foreground_idx = COLOR_WHITE;
+static int _default_background_idx = COLOR_BLACK;
+
+void PDC_set_default_colors( const int fg_idx, const int bg_idx)
+{
+   _default_foreground_idx = fg_idx;
+   _default_background_idx = bg_idx;
+}
+
 static void _normalize(int *fg, int *bg)
 {
     const bool using_defaults = (SP->orig_attr && (default_colors || !SP->color_started));
 
     if (*fg == -1 || *fg == UNSET_COLOR_PAIR)
-        *fg = using_defaults ? SP->orig_fore : COLOR_WHITE;
+        *fg = using_defaults ? SP->orig_fore : _default_foreground_idx;
 
     if (*bg == -1 || *bg == UNSET_COLOR_PAIR)
-        *bg = using_defaults ? SP->orig_back : COLOR_BLACK;
+        *bg = using_defaults ? SP->orig_back : _default_background_idx;
 }
 
 static void _init_pair_core(int pair, int fg, int bg)
@@ -333,18 +342,15 @@ int PDC_set_line_color(short color)
 
 int PDC_init_atrtab(void)
 {
-    int i;
-
     assert( SP);
     if( !SP->atrtab)
     {
-       atrtab_size_alloced = PDC_COLOR_PAIRS;
+       atrtab_size_alloced = 1;
        SP->atrtab = calloc( atrtab_size_alloced, sizeof(PDC_PAIR));
        if( !SP->atrtab)
            return -1;
     }
-    for (i = 0; i < atrtab_size_alloced; i++)
-       _init_pair_core( i, UNSET_COLOR_PAIR, UNSET_COLOR_PAIR);
+    _init_pair_core( 0, UNSET_COLOR_PAIR, UNSET_COLOR_PAIR);
     return( 0);
 }
 
