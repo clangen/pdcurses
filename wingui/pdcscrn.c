@@ -1630,7 +1630,6 @@ static int add_mouse( int button, const int action, const int x, const int y)
    if( action == BUTTON_RELEASED)
    {
        mouse_state &= ~(1 << button);
-       printf( "Button %d released, count %d\n", button, button_count[button - 1]);
        if( !button_count[button - 1])   /* a release with no matching press */
        {
            add_mouse_event_to_queue( button - 1, BUTTON_RELEASED, x, y);
@@ -1647,7 +1646,6 @@ static int add_mouse( int button, const int action, const int x, const int y)
    {
       mouse_state |= (1 << button);
       button_count[button - 1]++;
-      printf( "Button %d pressed, count %d\n", button, button_count[button - 1]);
    }
    if( button >= 0)
    {
