@@ -2215,14 +2215,14 @@ INLINE int set_up_window( void)
     debug_printf( "WindowTitle = '%ls'\n", winfo.WindowTitle);
 #endif
 
-    get_default_sizes_from_registry( &n_default_columns, &n_default_rows,
-                                     &winfo.xloc, &winfo.yloc);
-
     if( PDC_n_rows > 2 && PDC_n_cols > 2)
     {
         n_default_columns = PDC_n_cols;
         n_default_rows    = PDC_n_rows;
     }
+
+    get_default_sizes_from_registry( &n_default_columns, &n_default_rows,
+                                     &winfo.xloc, &winfo.yloc);
 
     if( ttytype[1])
         PDC_set_resize_limits( (unsigned char)ttytype[0],
