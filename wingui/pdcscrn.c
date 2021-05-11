@@ -2217,7 +2217,7 @@ INLINE int set_up_window( void)
 
     get_default_sizes_from_registry( &n_default_columns, &n_default_rows,
                                      &winfo.xloc, &winfo.yloc);
-    
+
     if( PDC_n_rows > 2 && PDC_n_cols > 2)
     {
         n_default_columns = PDC_n_cols;
