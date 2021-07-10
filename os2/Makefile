@@ -9,15 +9,17 @@
 # enables a PDCurses program to run under OS/2 and DOS.
 
 O = o
+E = .exe
 
 ifndef PDCURSES_SRCDIR
 	PDCURSES_SRCDIR = ..
 endif
 
-include $(PDCURSES_SRCDIR)/version.mif
-include $(PDCURSES_SRCDIR)/libobjs.mif
-
 osdir		= $(PDCURSES_SRCDIR)/os2
+common		= $(PDCURSES_SRCDIR)/common
+
+include $(common)/version.mif
+include $(common)/libobjs.mif
 
 PDCURSES_OS2_H	= $(osdir)/pdcos2.h
 
@@ -98,7 +100,6 @@ $(LIBOBJS) $(PDCOBJS) $(DEMOOBJS) : $(PDCURSES_HEADERS)
 $(PDCOBJS) : $(PDCURSES_OS2_H)
 $(DEMOS) : $(LIBCURSES)
 panel.o ptest.o: $(PANEL_HEADER)
-terminfo.o: $(TERM_HEADER)
 
 $(LIBOBJS) : %.o: $(srcdir)/%.c
 	$(CC) -c $(CFLAGS) -o$@ $<
@@ -129,4 +130,4 @@ PLATFORM1 = EMX OS/2
 PLATFORM2 = EMX 0.9d for OS/2
 ARCNAME = pdc$(VER)_emx_os2
 
-include $(PDCURSES_SRCDIR)/makedist.mif
+include $(common)/makedist.mif

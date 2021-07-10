@@ -11,22 +11,21 @@ ifndef PDCURSES_SRCDIR
 	PDCURSES_SRCDIR	= ..
 endif
 
-include $(PDCURSES_SRCDIR)/libobjs.mif
-
 osdir		= $(PDCURSES_SRCDIR)/vt
+common		= $(PDCURSES_SRCDIR)/common
 
 # If your system doesn't have these, remove the defines here
 SFLAGS		= -DHAVE_VSNPRINTF -DHAVE_VSSCANF
 
 ifeq ($(DEBUG),Y)
-	CFLAGS  = -g -Wall -DPDCDEBUG
+	CFLAGS  = -g -Wall -pedantic -DPDCDEBUG
 else
-	CFLAGS  = -O2 -Wall
+	CFLAGS  = -O2 -Wall -Wextra -pedantic
 endif
 
 ifeq ($(DOS),Y)
 	CFLAGS	+= -DDOS
-	EXE = .exe
+	E = .exe
 else
 	CFLAGS	+= -fPIC
 endif
@@ -43,23 +42,21 @@ ifdef CHTYPE_32
 	CFLAGS += -DCHTYPE_32
 endif
 
-ifdef CHTYPE_16
-	CFLAGS += -DCHTYPE_16
-endif
-
 ifdef _w64
 	PREFIX  = x86_64-w64-mingw32-
-	EXE = .exe
+	E = .exe
 endif
 
 ifdef _w32
 	PREFIX  = i686-w64-mingw32-
-	EXE = .exe
+	E = .exe
 endif
 
 CC	= $(PREFIX)gcc
 AR	= $(PREFIX)ar
 STRIP	= $(PREFIX)strip
+
+include $(common)/libobjs.mif
 
 BUILD		= $(CC) $(CFLAGS) -I$(PDCURSES_SRCDIR)
 
@@ -68,19 +65,16 @@ LDFLAGS		= $(LIBCURSES)
 RANLIB		= ranlib
 LIBCURSES	= libpdcurses.a
 
-DEMOS		= firework$(EXE) ozdemo$(EXE)  newtest$(EXE) ptest$(EXE) rain$(EXE) \
-    testcurs$(EXE) tuidemo$(EXE) worm$(EXE) xmas$(EXE)
-
 .PHONY: all libs clean demos
 
-all:	libs demos
+all:	libs
 
 libs:	$(LIBCURSES)
 
 clean:
 	-rm -rf *.o trace $(LIBCURSES) $(DEMOS)
 
-demos:	$(DEMOS)
+demos:	libs $(DEMOS)
 ifneq ($(DEBUG),Y)
 	strip $(DEMOS)
 endif
@@ -92,7 +86,6 @@ $(LIBCURSES) : $(LIBOBJS) $(PDCOBJS)
 $(LIBOBJS) $(PDCOBJS) : $(PDCURSES_HEADERS)
 $(DEMOS) : $(PDCURSES_CURSES_H) $(LIBCURSES)
 tui.o tuidemo.o : $(PDCURSES_CURSES_H)
-terminfo.o: $(TERM_HEADER)
 panel.o ptest: $(PANEL_HEADER)
 
 $(LIBOBJS) : %.o: $(srcdir)/%.c
@@ -101,31 +94,40 @@ $(LIBOBJS) : %.o: $(srcdir)/%.c
 $(PDCOBJS) : %.o: $(osdir)/%.c
 	$(BUILD) $(SFLAGS) -c $<
 
-firework$(EXE) : $(demodir)/firework.c
+firework$(E) : $(demodir)/firework.c
 	$(BUILD) $(DEMOFLAGS) -o $@ $< $(LDFLAGS)
 
-ozdemo$(EXE) : $(demodir)/ozdemo.c
+ozdemo$(E) : $(demodir)/ozdemo.c
 	$(BUILD) $(DEMOFLAGS) -o $@ $< $(LDFLAGS)
 
-newtest$(EXE) : $(demodir)/newtest.c
+newtest$(E) : $(demodir)/newtest.c
 	$(BUILD) $(DEMOFLAGS) -o $@ $< $(LDFLAGS)
 
-ptest$(EXE) : $(demodir)/ptest.c
+picsview$(E) : $(demodir)/picsview.c
 	$(BUILD) $(DEMOFLAGS) -o $@ $< $(LDFLAGS)
 
-rain$(EXE) : $(demodir)/rain.c
+ptest$(E) : $(demodir)/ptest.c
 	$(BUILD) $(DEMOFLAGS) -o $@ $< $(LDFLAGS)
 
-testcurs$(EXE) : $(demodir)/testcurs.c
+rain$(E) : $(demodir)/rain.c
 	$(BUILD) $(DEMOFLAGS) -o $@ $< $(LDFLAGS)
 
-tuidemo$(EXE) : tuidemo.o tui.o
+speed$(E) : $(demodir)/speed.c
+	$(BUILD) $(DEMOFLAGS) -o $@ $< $(LDFLAGS)
+
+testcurs$(E) : $(demodir)/testcurs.c
+	$(BUILD) $(DEMOFLAGS) -o $@ $< $(LDFLAGS)
+
+test_pan$(E) : $(demodir)/test_pan.c
+	$(BUILD) $(DEMOFLAGS) -o $@ $< $(LDFLAGS)
+
+tuidemo$(E) : tuidemo.o tui.o
 	$(LINK) tui.o tuidemo.o -o $@ $(LDFLAGS)
 
-worm$(EXE) : $(demodir)/worm.c
+worm$(E) : $(demodir)/worm.c
 	$(BUILD) $(DEMOFLAGS) -o $@ $< $(LDFLAGS)
 
-xmas$(EXE) : $(demodir)/xmas.c
+xmas$(E) : $(demodir)/xmas.c
 	$(BUILD) $(DEMOFLAGS) -o $@ $< $(LDFLAGS)
 
 tui.o: $(demodir)/tui.c $(demodir)/tui.h

@@ -14,10 +14,11 @@ RM = del
 PDCURSES_SRCDIR = ..
 !endif
 
-!include $(PDCURSES_SRCDIR)\version.mif
-!include $(PDCURSES_SRCDIR)\libobjs.mif
-
 osdir		= $(PDCURSES_SRCDIR)\vt
+common		= $(PDCURSES_SRCDIR)\common
+
+!include $(common)\version.mif
+!include $(common)\libobjs.mif
 
 !ifdef OLD_BCC
 CC		= bcc32 -q -DNO_STDINT_H
@@ -33,10 +34,6 @@ CFLAGS		= -O -DCHTYPE_32
 
 !ifdef CHTYPE_32
 CFLAGS = $(CFLAGS) -DCHTYPE_32
-!endif
-
-!ifdef CHTYPE_16
-CFLAGS = $(CFLAGS) -DCHTYPE_16
 !endif
 
 !ifdef WIDE
@@ -72,7 +69,7 @@ clean:
 	-$(RM) *.tds
 	-$(RM) *.exe
 
-demos:	$(DEMOS)
+demos:	$(LIBCURSES) $(DEMOS)
 
 $(LIBCURSES) : $(LIBOBJS) $(PDCOBJS)
 	-$(RM) $@
@@ -108,4 +105,4 @@ PLATFORM1 = Borland C++ Wincon
 PLATFORM2 = Borland C/C++ 7.2 for Windows console
 ARCNAME = pdc$(VER)_bcc_vt
 
-!include $(PDCURSES_SRCDIR)\makedist.mif
+!include $(common)\makedist.mif

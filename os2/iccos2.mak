@@ -6,15 +6,17 @@
 # [all|demos|pdcurses.lib|testcurs.exe...]
 
 O = obj
+E = .exe
 
 !ifndef PDCURSES_SRCDIR
 PDCURSES_SRCDIR = ..
 !endif
 
-!include $(PDCURSES_SRCDIR)\version.mif
-!include $(PDCURSES_SRCDIR)\libobjs.mif
-
 osdir		= $(PDCURSES_SRCDIR)\os2
+common		= $(PDCURSES_SRCDIR)\common
+
+!include $(common)\version.mif
+!include $(common)\libobjs.mif
 
 PDCURSES_OS2_H	= $(osdir)\pdcos2.h
 
@@ -83,9 +85,6 @@ delch.obj: $(srcdir)\delch.c $(PDCURSES_HEADERS)
 
 deleteln.obj: $(srcdir)\deleteln.c $(PDCURSES_HEADERS)
 	$(BUILD) $(srcdir)\deleteln.c
-
-deprec.obj: $(srcdir)\deprec.c $(PDCURSES_HEADERS)
-	$(BUILD) $(srcdir)\deprec.c
 
 getch.obj: $(srcdir)\getch.c $(PDCURSES_HEADERS)
 	$(BUILD) $(srcdir)\getch.c
@@ -161,9 +160,6 @@ slk.obj: $(srcdir)\slk.c $(PDCURSES_HEADERS)
 
 termattr.obj: $(srcdir)\termattr.c $(PDCURSES_HEADERS)
 	$(BUILD) $(srcdir)\termattr.c
-
-terminfo.obj: $(srcdir)\terminfo.c $(PDCURSES_HEADERS) $(TERM_HEADER)
-	$(BUILD) $(srcdir)\terminfo.c
 
 touch.obj: $(srcdir)\touch.c $(PDCURSES_HEADERS)
 	$(BUILD) $(srcdir)\touch.c
@@ -253,4 +249,4 @@ PLATFORM1 = C Set/2 OS/2
 PLATFORM2 = C Set/2 for OS/2
 ARCNAME = pdc$(VER)_icc_os2
 
-!include $(PDCURSES_SRCDIR)\makedist.mif
+!include $(common)\makedist.mif
